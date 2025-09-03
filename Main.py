@@ -25,31 +25,35 @@ def get_access_token():
         print("Failed to get token:", response.text)
         return None
     
-def get_all_flights(token):
+def get_all_flights(token, dep_date_str=None, is_return=False, is_flexible=None, return_date_str=None):
     from datetime import datetime, timedelta
-    # Prompt user for a departure date
-    user_departure_date = input("Enter your preferred departure date (YYYY-MM-DD): ")
-    user_return = input("Will this be a return flight? (Y/N): ")
-    flexible_search = input("Do you want to search for the cheapest flights in a ±3 day window? (Y/N): ")
-    return_flight = False
-    user_return_date_obj = None
+    # Use provided params (from GUI) or fall back to interactive prompts
+    if dep_date_str is None:
+        dep_date_str = input("Enter your preferred departure date (YYYY-MM-DD): ")
+
+    if is_return and return_date_str is None:
+        return_date_str = input("Enter your preferred return date (YYYY-MM-DD): ")
+
+    if is_flexible is None:
+        flexible_search = input("Do you want to search for the cheapest flights in a ±3 day window? (Y/N): ")
+        is_flexible = flexible_search.upper() == "Y"
+
     try:
-        selected_date = datetime.strptime(user_departure_date, "%Y-%m-%d").date()
-        if user_return.upper() == "Y":
-            user_return_date = input("Enter your preferred return date (YYYY-MM-DD): ")
-            user_return_date_obj = datetime.strptime(user_return_date, "%Y-%m-%d").date()
-            return_flight = True
+        selected_date = datetime.strptime(dep_date_str, "%Y-%m-%d").date()
+        user_return_date_obj = None
+        if is_return and return_date_str:
+            user_return_date_obj = datetime.strptime(return_date_str, "%Y-%m-%d").date()
     except ValueError:
         print("Invalid date format. Please use YYYY-MM-DD.")
-        return []
+        return [], bool(is_flexible)
 
     all_flights = []
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
-    if flexible_search.upper() == "Y":
-        if return_flight and user_return_date_obj:
+    if is_flexible:
+        if is_return and user_return_date_obj:
             for dep_offset in range(-3, 4):
                 dep_date = selected_date + timedelta(days=dep_offset)
                 for ret_offset in range(-3, 4):
@@ -79,7 +83,7 @@ def get_all_flights(token):
                 else:
                     print(f"Failed to get flights for {current_date.isoformat()}:", response.text)
     else:
-        if return_flight and user_return_date_obj:
+        if is_return and user_return_date_obj:
             url = f"https://test.api.amadeus.com/v2/shopping/flight-offers?originLocationCode=DRW&destinationLocationCode=ADL&departureDate={selected_date.isoformat()}&returnDate={user_return_date_obj.isoformat()}&adults=1&max=5&currencyCode=AUD"
             response = requests.get(url, headers=headers)
             if response.status_code == 200:
@@ -102,7 +106,7 @@ def get_all_flights(token):
                     all_flights.extend(data)
             else:
                 print(f"Failed to get flights for {selected_date.isoformat()}:", response.text)
-    return all_flights, flexible_search.upper() == "Y"
+    return all_flights, bool(is_flexible)
 
 # Example usage:
 if __name__ == "__main__":
